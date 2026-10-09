@@ -24,6 +24,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Snyk necesita las dependencias de Maven ya resueltas para analizarlas
+      - name: Resolve Maven dependencies
+        run: mvn -B dependency:resolve
+
       - name: Install Snyk CLI
         run: npm install -g snyk
 
