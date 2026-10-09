@@ -24,6 +24,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Snyk ejecuta ./mvnw y en Windows el archivo se sube sin permiso de ejecucion
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
       # Snyk necesita las dependencias de Maven ya resueltas para analizarlas
       - name: Resolve Maven dependencies
         run: mvn -B dependency:resolve
@@ -43,7 +47,7 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --file=pom.xml --severity-threshold=high -d
+        run: snyk test --file=pom.xml --severity-threshold=high
 
       # Reporte JSON REAL de Snyk (no un texto de relleno)
       - name: Generate Snyk JSON Report
