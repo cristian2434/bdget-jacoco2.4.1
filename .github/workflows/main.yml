@@ -43,7 +43,7 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --file=pom.xml --severity-threshold=high
+        run: snyk test --file=pom.xml --severity-threshold=high -d
 
       # Reporte JSON REAL de Snyk (no un texto de relleno)
       - name: Generate Snyk JSON Report
