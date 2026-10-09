@@ -8,7 +8,7 @@ on:
 jobs:
 
   # =========================
-  # 🔐 1. SNYK SCAN ..
+  # 1. SNYK SCAN
   # =========================
   snyk-scan:
     name: Snyk Security Scan
@@ -24,29 +24,42 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Snyk
+      - name: Install Snyk CLI
         run: npm install -g snyk
 
-      - name: Authenticate Snyk
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+      - name: Authenticate Snyk CLI
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk auth $SNYK_TOKEN
 
-      # 👇 Ejecuta Snyk pero no rompe pipeline
-      - name: Run Snyk (non-blocking)
-        run: snyk test --file=pom.xml || true
+      # Analiza vulnerabilidades de severidad alta o mayor.
+      # continue-on-error: el pipeline sigue aunque Snyk encuentre problemas.
+      # Para que Snyk DETENGA el pipeline, borra la linea "continue-on-error".
+      - name: Snyk test Java dependencies
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --file=pom.xml --severity-threshold=high
 
-      # 👇 Genera reporte válido para evidencia
-      - name: Generate Snyk Report (safe)
+      # Reporte JSON REAL de Snyk (no un texto de relleno)
+      - name: Generate Snyk JSON Report
+        if: always()
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          echo '{"status":"completed","message":"Snyk executed in CI"}' > snyk-report.json
+          echo "Generando reporte JSON de Snyk..."
+          snyk test --file=pom.xml --json > snyk-report.json || echo "snyk test encontro vulnerabilidades, pero se continua"
+          ls -lh snyk-report.json || echo "No se genero el reporte"
 
-      - name: Upload Snyk Report
+      - name: Upload Snyk JSON Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: snyk-report
           path: snyk-report.json
 
   # =========================
-  # 🧪 2. TEST + JACOCO
+  # 2. TEST + JACOCO
   # =========================
   test:
     name: Run Tests with JaCoCo
@@ -63,13 +76,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Cache Maven
+      - name: Cache Maven dependencies
         uses: actions/cache@v3
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2
 
-      - name: Run tests
+      - name: Build and test
         run: mvn clean verify
 
       - name: Upload JaCoCo Report
@@ -79,7 +94,7 @@ jobs:
           path: target/site/jacoco/
 
   # =========================
-  # 📊 3. SONARCLOUD
+  # 3. SONARCLOUD
   # =========================
   sonar:
     name: SonarCloud Analysis
@@ -89,6 +104,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # SonarCloud necesita el historial completo
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -96,19 +113,28 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Run SonarCloud
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2
+
+      # CAMBIAR si el projectKey que muestra SonarCloud es distinto
+      - name: Run SonarCloud Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           mvn verify sonar:sonar \
-          -Dsonar.projectKey=cbugueno-duoc_bdget-jacoco \
-          -Dsonar.organization=cbugueno-duoc \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.login=$SONAR_TOKEN \
-          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            -Dsonar.projectKey=cristian2434_bdget-jacoco2.4.1 \
+            -Dsonar.organization=cristian2434 \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=${SONAR_TOKEN} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   # =========================
-  # 🧱 4. BUILD FINAL
+  # 4. BUILD FINAL
   # =========================
   build:
     name: Build JAR
@@ -125,10 +151,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build JAR
+      - name: Package application
         run: mvn clean package -DskipTests
 
-      - name: Upload JAR
+      - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
